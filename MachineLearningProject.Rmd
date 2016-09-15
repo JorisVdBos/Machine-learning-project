@@ -43,7 +43,7 @@ chars <- sapply(1:160, function (x){class(training[, x]) == "character"})
 for(i in which(chars)) training[, i] <- as.numeric(training[, i])
 ```
 
-Before a model can be set up, good predictors must be found. A first filterring of the 159 possible predictors can be done by identifying the zero variance columns, using the function "nearZeroVar" of the caret library.
+Before a model can be set up, good predictors must be found. A first filterring of the 159 possible predictors can be done by identifying the zero variance columns, using the function "nearZeroVar" of the caret library, and removing them from the data frame.
 ```{r, echo = -4}
 library(caret)
 nzv <- nearZeroVar(x = training)
@@ -67,28 +67,28 @@ training <- training[,-correl]
 correl
 ```
 
-Aftere this there are still 52 columns left with possible predictors. Because of the large amount of columns, it would be a good idea to look at principal component analysis to reduce the amount of columns to make the final model less computationally heavy.
+After this there are still 52 columns left with possible predictors. Because of the large amount of columns, it would be a good idea to look at principal component analysis to reduce the amount of columns to make the final model less computationally heavy.
 ```{r, echo = -3}
 set.seed(100)
 preProcess <- preProcess(training, method = "pca")
 preProcess
 ```
 
-It will be indeed good to use pca as preprocessing.
+It will be indeed good to use pca as preprocessing, as 95% of the variance can be explained by only 23 columns.  
 
 # Modelling
-The part we are modelling is the "classe" column. Possible outcomes are numbers A through E. This means the problem we are having is a classification problem. Supervised methods like linear regression and naive bayes will therefore be less interesting. The most promising would be using decision trees, or boosting.  
-The first model will be using decision trees on our data set. The default amount of trees used is 400, but that took too long to calculate, so I have set the number of trees to 50. The model's performance gets better with more trees though.
+The part that is meant to be predicted is the "classe" column. Possible outcomes are numbers A through E. This means the problem is a classification problem. Supervised methods like linear regression and naive bayes will therefore be less interesting. The most promising methods would be decision trees, and boosting.  
+The first model will be using decision trees on our data set. The default amount of trees used is 400, which takes a lot of computational power, so the number of trees is set to 50. The model's performance can be improved by adding more trees.
 ```{r, cache = TRUE}
 randForModel <- train(data = training, classe ~ .,method = "rf", ntree = 50,
                       preProcess=c("pca")) # This calculation takes a few minutes!
-randForModel$finalModel
+randForModel
 ```
 ```{r}
-confusionMatrix(predict(randForModel, training), training$classe)$table
+randForModel$finalModel
 ```
 
-The error rate is 0.92%, so it is a very good model! To estimate the accuracy on a test set, a crossvalidation of 10 k-folds is used.
+The error rate was determined to be 0.92%, so it is a very good model! To estimate the accuracy on a test set, a crossvalidation of 10 k-folds is used.
 ```{r, echo = -6, cache = TRUE}
 train_control <- trainControl(method="cv", number=10, savePredictions = TRUE)
 randForModel <- train(data = training, classe ~ .,method = "rf", ntree = 50, 
@@ -103,29 +103,32 @@ mean(foldsAccs$V1)
 sd(foldsAccs$V1)
 ```
 
-The accuracy is, worst case 98.3%!
+The accuracy is, with 95% certainty, above 98.3%.  
 
-For comparison's sake, a boosting model is also fitted.
+For comparison's sake, a boosting model is also fitted. Using the expand.grid function, multiple options can be explored. Different configurations are tried out using the expand.grid function.
 ```{r, cache = TRUE, echo = -3}
-gbmGrid <-  expand.grid(interaction.depth = c(1, 5, 9), 
-                        n.trees = 50)
+gbmGrid <-  expand.grid(interaction.depth = c(1,5,10), 
+                        n.trees = (1:10)*5, 
+                        shrinkage = 0.1,
+                        n.minobsinnode = 20)
 boostModel <- train(data = training, classe ~ .,method = "gbm", 
                     verbose = FALSE, tuneGrid = gbmGrid,
                       preProcess=c("pca"), trControl = train_control)
 boostModel$finalModel
 ```
-```{r, echo = -3}
-crossVal <- data.table(boostModel$pred)
-foldsAccs <- crossVal[, sum(pred == obs)/ .N, by = Resample]
-foldsAccs
+
+The different configurations can be easily plotted.
+```{r}
+trellis.par.set(caretTheme())
+plot(boostModel)
 ```
 
-The accuracy is a lot lower than the original random forest model.
+The accuracy goes to a maximum of 95% for a tree depth of 10 with 50 trees. The rising curve means it will probably be even better with more trees and more tree depth. This can be further analysed and tested by altering the gbmGrid variable. Another possibility would be to combine the two models. This would require to check where they (dis)agree and modelling the decisions with for example another decision tree. However, for lack of computational resources and time, this will be skipped and predictions will be made with the random forest function.  
 
 # Making predictions
 Using the random forest function, new predictions can be made from the testing data. Before applying the model, the testing data has to go through the same pre-processing. In this case, is is only removing columns. The pca transformation is present in the model.
 ```{r}
-for(i in c("user_name", "new_window", "classe")) testing[, i] <- factor(testing[, i])
+for(i in c("user_name", "new_window", "problem_id")) testing[, i] <- factor(testing[, i])
 testing$cvtd_timestamp <- as.Date(testing$cvtd_timestamp, format = "%d/%m/%Y %H:%M")
 testing$new_window <- ifelse(testing$new_window == "yes", 1, 0)
 chars <- sapply(1:160, function (x){class(testing[, x]) == "character"})
@@ -141,3 +144,5 @@ predictions <- data.frame(Case = testing$X, prediction = predict(randForModel, t
 predictions
 ```
 
+# Final words
+Thank you for reading this project assignment and have a nice day!
