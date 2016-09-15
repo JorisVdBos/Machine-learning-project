@@ -85,7 +85,7 @@ randForModel <- train(data = training, classe ~ .,method = "rf", ntree = 50,
 randForModel
 ```
 ```{r}
-randForModel$finalModel
+randForModel$finalModel$confusion
 ```
 
 The error rate was determined to be 0.92%, so it is a very good model! To estimate the accuracy on a test set, a crossvalidation of 10 k-folds is used.
